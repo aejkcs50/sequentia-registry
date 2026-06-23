@@ -1,0 +1,31 @@
+[
+  {
+    "_comment": "Legacy testnet demo assets. They were issued WITHOUT an on-chain contract (contract_hash=0), so they cannot pass cryptographic contract verification; they are seeded as pre-approved, unverified entries so the explorer/wallet/GUI still resolve their labels from the registry. issuer_pubkey is a testnet placeholder. New assets issued with a real contract_hash get full chain+domain verification via POST /.",
+    "asset_id": "c8eccacf0953e1931cd31e434d8319101cc36e6c38b0e2104d8687552fae3e40",
+    "contract": { "name": "Sequentia", "ticker": "tSEQ", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
+  },
+  {
+    "asset_id": "dc7f45fcfeb17c8ae74e284472d85543395f50e88f4a36cb652e8102703b7027",
+    "contract": { "name": "USD Stablecoin", "ticker": "USDX", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
+  },
+  {
+    "asset_id": "f7a756b4e966623065543e52b754324629295c895046a0916a939898ad373667",
+    "contract": { "name": "Euro Stablecoin", "ticker": "EURX", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
+  },
+  {
+    "asset_id": "c28fc933ce41f7a9188da029c6f7377fc961e2d58588372ef4073438610b9283",
+    "contract": { "name": "Gold (troy ounce)", "ticker": "GOLD", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
+  },
+  {
+    "asset_id": "3e30ad0ebd13cc7ac1bbd12df1414b213708a6048b745d185fe935d9624024db",
+    "contract": { "name": "Wrapped Bitcoin", "ticker": "WBTC", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
+  },
+  {
+    "asset_id": "50a00211d7074d5f857a3dec6cb84a1f3fefb26e56a94a954a299b28ac9f32df",
+    "contract": { "name": "Silver (troy ounce)", "ticker": "SILVR", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
+  },
+  {
+    "asset_id": "f9b069ac00f4dc57381a304704fac93301f90d3d509d207cfbddc8367d4e9cfb",
+    "contract": { "name": "Crude Oil (barrel)", "ticker": "OILX", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
+  }
+]
