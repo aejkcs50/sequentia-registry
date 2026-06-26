@@ -12,7 +12,7 @@ Zero dependencies. Run it with plain Node:
 node server.js
 ```
 
-## Trust model (full Liquid parity)
+## Trust model
 
 Anyone can submit metadata for an asset, but it is only accepted if **both** checks pass:
 
