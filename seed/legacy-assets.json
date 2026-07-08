@@ -42,8 +42,8 @@
         "version": 1,
         "type": "restricted",
         "policy_pubkey": "43c91906683e1a6f62f57796db6f1270b68fee0f193e840642a27a86b1100cb8",
-        "tier": "A",
         "clawback": true,
+        "confidential": false,
         "policy_endpoints": ["https://sequentiatestnet.com/openamp/"]
       }
     }

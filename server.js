@@ -183,14 +183,15 @@ function validateOpenAmp(o) {
   if (!o || typeof o !== 'object') return ['openamp: must be an object'];
   if (!Number.isInteger(o.version) || o.version < 1) errs.push('openamp.version: integer >= 1');
   if (o.type !== 'restricted' && o.type !== 'tracked') errs.push('openamp.type: "restricted" | "tracked"');
-  if (typeof o.policy_pubkey !== 'string' || !XONLY_RE.test(o.policy_pubkey)) errs.push('openamp.policy_pubkey: 32-byte x-only hex');
-  if (o.tier !== 'A' && o.tier !== 'B') errs.push('openamp.tier: "A" | "B"');
+  if (typeof o.policy_pubkey !== 'string' || !XONLY_RE.test(o.policy_pubkey)) errs.push('openamp.policy_pubkey: 32-byte x-only hex (FROST group key)');
   if (typeof o.clawback !== 'boolean') errs.push('openamp.clawback: boolean');
+  if (o.burn_allowed !== undefined && typeof o.burn_allowed !== 'boolean') errs.push('openamp.burn_allowed: boolean');
+  if (o.confidential !== undefined && typeof o.confidential !== 'boolean') errs.push('openamp.confidential: boolean');
   if (o.policy_endpoints !== undefined) {
     if (!Array.isArray(o.policy_endpoints) || !o.policy_endpoints.every(e => typeof e === 'string' && /^https:\/\//.test(e)))
       errs.push('openamp.policy_endpoints: array of https urls');
   }
-  const allowed = new Set(['version', 'type', 'policy_pubkey', 'tier', 'clawback', 'policy_endpoints']);
+  const allowed = new Set(['version', 'type', 'policy_pubkey', 'clawback', 'burn_allowed', 'confidential', 'policy_endpoints', 'terms_hash']);
   for (const k of Object.keys(o)) if (!allowed.has(k)) errs.push(`unexpected openamp field: ${k}`);
   return errs;
 }
