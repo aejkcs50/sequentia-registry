@@ -8,7 +8,7 @@
  * serves it over a small HTTP API that every Sequentia surface (node, node GUI,
  * block explorer, SWK wallet) can consume.
  *
- * Trust model (full Liquid parity):
+ * Trust model:
  *   1. CONTRACT BINDING. An asset's metadata lives in a "contract" JSON. The
  *      contract_hash = SHA256(canonical-JSON(contract)) is committed *on-chain*
  *      at issuance (it is the issuance input's contract_hash / asset_entropy, and
