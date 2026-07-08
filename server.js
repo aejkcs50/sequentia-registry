@@ -52,6 +52,7 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 
 const ASSET_RE = /^[0-9a-f]{64}$/;
 const PUBKEY_RE = /^[0-9a-f]{66}$/; // 33-byte compressed pubkey
+const XONLY_RE = /^[0-9a-f]{64}$/;  // 32-byte x-only pubkey (OpenAMP enclave keys)
 const TICKER_RE = /^[A-Za-z0-9.\-]{1,12}$/; // allow mixed case (e.g. tSEQ, tBTC)
 const DOMAIN_RE = /^(?=.{1,253}$)([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$/i;
 
@@ -160,16 +161,37 @@ function validateContract(c) {
   if (!Number.isInteger(c.precision) || c.precision < 0 || c.precision > 8) errs.push('precision: integer 0..8');
   if (!c.entity || typeof c.entity !== 'object' || typeof c.entity.domain !== 'string' || !DOMAIN_RE.test(c.entity.domain))
     errs.push('entity.domain: valid domain');
-  if (typeof c.issuer_pubkey !== 'string' || !PUBKEY_RE.test(c.issuer_pubkey)) errs.push('issuer_pubkey: 33-byte hex');
-  // Reject any pubkey whose 32-byte X coordinate is all zeros: that is not a
-  // valid curve point and is the all-zeros placeholder used by the legacy demo
-  // seed (HIGH-5). Also reject the trivially-invalid all-zeros 33 bytes.
-  else if (/^[0-9a-f]{2}0{64}$/i.test(c.issuer_pubkey)) errs.push('issuer_pubkey: must not have an all-zeros X coordinate (placeholder)');
+  // issuer_pubkey may be a 33-byte compressed key or, for OpenAMP restricted
+  // assets whose enclave keys are BIP340 x-only, a 32-byte x-only key.
+  if (typeof c.issuer_pubkey !== 'string' || !(PUBKEY_RE.test(c.issuer_pubkey) || XONLY_RE.test(c.issuer_pubkey)))
+    errs.push('issuer_pubkey: 33-byte compressed or 32-byte x-only hex');
+  else if (/^(?:[0-9a-f]{2})?0{64}$/i.test(c.issuer_pubkey)) errs.push('issuer_pubkey: must not have an all-zeros X coordinate (placeholder)');
   if (c.version !== 0) errs.push('version: must be 0');
+  // Optional OpenAMP block: marks the asset as issuer-governed (restricted)
+  // and points wallets at the policy server that verifies the binding and
+  // co-signs transfers. See the openamp repo's spec/contract-v1.md.
+  if (c.openamp !== undefined) errs.push(...validateOpenAmp(c.openamp));
   // Reject unknown top-level keys so the canonical hash is well-defined.
-  const allowed = new Set(['name', 'ticker', 'precision', 'entity', 'issuer_pubkey', 'version']);
+  const allowed = new Set(['name', 'ticker', 'precision', 'entity', 'issuer_pubkey', 'version', 'openamp']);
   for (const k of Object.keys(c)) if (!allowed.has(k)) errs.push(`unexpected field: ${k}`);
   if (c.entity) for (const k of Object.keys(c.entity)) if (k !== 'domain') errs.push(`unexpected entity field: ${k}`);
+  return errs;
+}
+
+function validateOpenAmp(o) {
+  const errs = [];
+  if (!o || typeof o !== 'object') return ['openamp: must be an object'];
+  if (!Number.isInteger(o.version) || o.version < 1) errs.push('openamp.version: integer >= 1');
+  if (o.type !== 'restricted' && o.type !== 'tracked') errs.push('openamp.type: "restricted" | "tracked"');
+  if (typeof o.policy_pubkey !== 'string' || !XONLY_RE.test(o.policy_pubkey)) errs.push('openamp.policy_pubkey: 32-byte x-only hex');
+  if (o.tier !== 'A' && o.tier !== 'B') errs.push('openamp.tier: "A" | "B"');
+  if (typeof o.clawback !== 'boolean') errs.push('openamp.clawback: boolean');
+  if (o.policy_endpoints !== undefined) {
+    if (!Array.isArray(o.policy_endpoints) || !o.policy_endpoints.every(e => typeof e === 'string' && /^https:\/\//.test(e)))
+      errs.push('openamp.policy_endpoints: array of https urls');
+  }
+  const allowed = new Set(['version', 'type', 'policy_pubkey', 'tier', 'clawback', 'policy_endpoints']);
+  for (const k of Object.keys(o)) if (!allowed.has(k)) errs.push(`unexpected openamp field: ${k}`);
   return errs;
 }
 

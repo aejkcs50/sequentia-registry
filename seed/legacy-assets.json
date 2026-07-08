@@ -27,5 +27,25 @@
   {
     "asset_id": "f9b069ac00f4dc57381a304704fac93301f90d3d509d207cfbddc8367d4e9cfb",
     "contract": { "name": "Crude Oil (barrel)", "ticker": "OILX", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
+  },
+  {
+    "_comment": "OpenAMP restricted asset (issuer-governed). Its on-chain contract_hash commits to the openamp block including policy_pubkey; wallets verify the asset->policy binding against the policy server at policy_endpoints, which returns the exact on-chain contract. This registry entry is for discovery.",
+    "asset_id": "8d1dbf45af45dd18eac10215efb86386695b9c4122ce6f4c18e03fea155e86c7",
+    "contract": {
+      "name": "OpenAMP Demo Bond",
+      "ticker": "BONDX",
+      "precision": 8,
+      "entity": { "domain": "sequentiatestnet.com" },
+      "issuer_pubkey": "8fcde5f0300f3ed0343998b846070bfff8b16148f28f53b31ae5d7168c9889ca",
+      "version": 0,
+      "openamp": {
+        "version": 1,
+        "type": "restricted",
+        "policy_pubkey": "43c91906683e1a6f62f57796db6f1270b68fee0f193e840642a27a86b1100cb8",
+        "tier": "A",
+        "clawback": true,
+        "policy_endpoints": ["https://sequentiatestnet.com/openamp/"]
+      }
+    }
   }
 ]
