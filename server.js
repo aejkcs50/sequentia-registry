@@ -171,10 +171,26 @@ function validateContract(c) {
   // and points wallets at the policy server that verifies the binding and
   // co-signs transfers. See the openamp repo's spec/contract-v1.md.
   if (c.openamp !== undefined) errs.push(...validateOpenAmp(c.openamp));
-  // Reject unknown top-level keys so the canonical hash is well-defined.
-  const allowed = new Set(['name', 'ticker', 'precision', 'entity', 'issuer_pubkey', 'version', 'openamp']);
+  // Reject unknown top-level keys so the canonical hash is well-defined. An
+  // OpenAMP issuer may commit its operator identity in the contract (the
+  // registrar/transfer-agent operating the policy server); the contract_hash
+  // commits to the whole document, so the registry must accept those exact bytes
+  // to verify the on-chain binding rather than strip them post-hoc.
+  const allowed = new Set(['name', 'ticker', 'precision', 'entity', 'issuer_pubkey', 'version', 'openamp', 'operator']);
   for (const k of Object.keys(c)) if (!allowed.has(k)) errs.push(`unexpected field: ${k}`);
-  if (c.entity) for (const k of Object.keys(c.entity)) if (k !== 'domain') errs.push(`unexpected entity field: ${k}`);
+  if (c.entity) for (const k of Object.keys(c.entity)) if (k !== 'domain' && k !== 'issuer') errs.push(`unexpected entity field: ${k}`);
+  if (c.entity && c.entity.issuer !== undefined && typeof c.entity.issuer !== 'string') errs.push('entity.issuer: string');
+  if (c.operator !== undefined) errs.push(...validateOperator(c.operator));
+  return errs;
+}
+
+function validateOperator(op) {
+  const errs = [];
+  if (!op || typeof op !== 'object') return ['operator: must be an object'];
+  const allowed = new Set(['name', 'registration']);
+  for (const k of Object.keys(op)) if (!allowed.has(k)) errs.push(`unexpected operator field: ${k}`);
+  if (op.name !== undefined && typeof op.name !== 'string') errs.push('operator.name: string');
+  if (op.registration !== undefined && typeof op.registration !== 'string') errs.push('operator.registration: string');
   return errs;
 }
 
