@@ -141,9 +141,10 @@ function deriveAssetId(prevoutTxid, prevoutVout, contractHashHex) {
   // SerializeHash() is a DOUBLE SHA256 (CHashWriter::GetHash), not a single one.
   const sha = (b) => crypto.createHash('sha256').update(b).digest();
   const leafPrevout = sha(sha(outpoint));
-  // The on-chain contract_hash matches Node's SHA256(canonical-JSON(contract))
-  // byte-for-byte (the same value the existing check compares), so its raw bytes
-  // are used directly as the merkle leaf (the internal uint256 order).
+  // contractHashHex is the NATURAL-order contract_hash (onChainContract reverses
+  // electrs's display-order value back to natural), which equals Node's
+  // SHA256(canonical-JSON(contract)) byte-for-byte, so its raw bytes are the merkle
+  // leaf in internal uint256 order.
   const entropy = merkleNode(leafPrevout, Buffer.from(contractHashHex, 'hex'));
   const assetInternal = merkleNode(entropy, Buffer.alloc(32));
   // CAsset is printed via uint256::GetHex(), which reverses the internal bytes,
@@ -295,9 +296,15 @@ async function onChainContract(assetId) {
   const iss = vin && vin.issuance;
   if (!iss) throw httpErr(400, 'issuance input not found in issuance tx');
   if (iss.is_reissuance) throw httpErr(400, 'issuance input is a reissuance, not the initial issuance');
-  // The issuance input's prevout is what binds the asset id (MED-3).
+  // electrs reports the issuance contract_hash as a uint256 in DISPLAY (reversed)
+  // byte order, like every other 256-bit hash it prints. The on-chain commitment is
+  // SHA256(canonical-JSON(contract)) in NATURAL order (the value the node hashes and
+  // the value deriveAssetId feeds to the merkle leaf), so reverse it back to natural
+  // order here. Without this, a legitimately-issued OpenAMP asset never verifies.
+  if (!/^[0-9a-f]{64}$/.test(iss.contract_hash || ''))
+    throw httpErr(400, 'issuance input has no valid contract_hash on chain');
   return {
-    contract_hash: iss.contract_hash,
+    contract_hash: Buffer.from(iss.contract_hash, 'hex').reverse().toString('hex'),
     issuance_txid: itx.txid,
     prevout_txid: vin.txid,
     prevout_vout: vin.vout,
