@@ -1,27 +1,33 @@
 [
   {
-    "_comment": "Pre-approved testnet demo assets on the current public testnet (re-genesis 2026-07-05). They were issued with contract_hash = 0 (no on-chain contract), so they cannot pass cryptographic contract verification; they are seeded as pre-approved, UNVERIFIED entries (legacy: true, verified: false) so the explorer/wallet/GUI still resolve their labels from the registry. issuer_pubkey is a testnet placeholder. New assets issued with a real contract_hash get full chain+domain verification via POST /.",
+    "_comment": "Pre-approved testnet demo assets (re-genesis 2026-07-05). They were issued with contract_hash = 0 (no on-chain contract), so they can NEVER pass cryptographic chain+domain verification. As the testnet registry operator we vouch for them directly: operator_verified:true makes loadSeed set verified:1 with verified_by:'operator', while verified_chain/verified_domain stay false, so the wallet/GUI/explorer show their labels as trusted. This is a TESTNET operator convenience ONLY; on a public/mainnet network `verified` must be earned via POST / (on-chain contract match + .well-known domain proof). New assets issued with a real contract_hash get that full verification. issuer_pubkey here is a testnet placeholder.",
     "asset_id": "c8eccacf0953e1931cd31e434d8319101cc36e6c38b0e2104d8687552fae3e40",
+    "operator_verified": true,
     "contract": { "name": "Sequence", "ticker": "tSEQ", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
   },
   {
     "asset_id": "2a515539da5e6a60caa7766ecd65bac0c10d15717ddd2088844ba58f4d04b9de",
+    "operator_verified": true,
     "contract": { "name": "USD Stablecoin", "ticker": "USDX", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
   },
   {
     "asset_id": "e39685e718516156679088d9400d11a1eb82bf7cc27c5b9f5a614b8c91246d13",
+    "operator_verified": true,
     "contract": { "name": "Euro Stablecoin", "ticker": "EURX", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
   },
   {
     "asset_id": "3a0f9192219db59f8d7f87d93ac6311095dfe1255d149727b87baaa7d2cc71a1",
+    "operator_verified": true,
     "contract": { "name": "Gold (troy ounce)", "ticker": "GOLD", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
   },
   {
     "asset_id": "57dfa6b0eff594cc3ef1de5555e0526d1eb5590289e014e7663b292edcd63f48",
+    "operator_verified": true,
     "contract": { "name": "Silver (troy ounce)", "ticker": "SILVR", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
   },
   {
     "asset_id": "4dfe69c334a9cdf4005ddf3889bba1bc397703fa8da669254877f3209caf7c8f",
+    "operator_verified": true,
     "contract": { "name": "Crude Oil (barrel)", "ticker": "OILX", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
   },
   {
