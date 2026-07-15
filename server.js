@@ -433,9 +433,31 @@ function loadSeed() {
   if (!fs.existsSync(SEED_FILE)) return;
   let seed;
   try { seed = JSON.parse(fs.readFileSync(SEED_FILE, 'utf8')); } catch (e) { console.error('[registry] bad seed file:', e.message); return; }
-  let n = 0;
+  let n = 0, reconciled = 0;
   for (const s of seed) {
-    if (!s.asset_id || !ASSET_RE.test(s.asset_id) || readEntry(s.asset_id)) continue;
+    if (!s.asset_id || !ASSET_RE.test(s.asset_id)) continue;
+    // OPERATOR OVERRIDE. A seed entry may carry "operator_verified": true. These
+    // are testnet demo assets issued with contract_hash = 0, so they can NEVER pass
+    // the cryptographic chain+domain check; the registry OPERATOR vouches for them
+    // by fiat instead. This is a deliberate TESTNET convenience and is NOT the model
+    // for a public/mainnet network, where `verified` must be earned via POST /
+    // (on-chain contract match + .well-known domain proof). The audit trail stays
+    // honest: verified_chain and verified_domain remain false, and verified_by
+    // records that a human operator (not the chain) vouched.
+    const wantVerified = s.operator_verified === true;
+    const existing = readEntry(s.asset_id);
+    if (existing) {
+      // Idempotently reconcile the override on restart (e.g. after a git pull that
+      // toggled operator_verified). Only ever touch a LEGACY, non-chain-verified
+      // entry, so a properly chain-verified registration can never be overridden.
+      if (existing.legacy && !existing.verified_chain && !!existing.verified !== wantVerified) {
+        existing.verified = wantVerified;
+        existing.verified_by = wantVerified ? 'operator' : null;
+        writeEntry(existing);
+        reconciled++;
+      }
+      continue;
+    }
     // Seed entries are exempt from validateContract's all-zeros-pubkey and other
     // strict checks (they predate the contract scheme), but we still enforce a
     // well-formed shape and ticker uniqueness (HIGH-4) so a seed can't squat a
@@ -445,12 +467,14 @@ function loadSeed() {
     if (owner && owner !== s.asset_id) { console.error(`[registry] seed ${s.asset_id} skipped: ticker '${s.contract.ticker}' already held by ${owner}`); continue; }
     writeEntry({
       asset_id: s.asset_id, contract: s.contract, contract_hash: contractHash(s.contract),
-      issuance_txid: s.issuance_txid || null, verified: false, verified_chain: false,
+      issuance_txid: s.issuance_txid || null, verified: wantVerified, verified_chain: false,
       verified_domain: false, legacy: true, proof_url: null,
+      verified_by: wantVerified ? 'operator' : null,
     });
     n++;
   }
   if (n) console.log(`[registry] seeded ${n} legacy asset(s)`);
+  if (reconciled) console.log(`[registry] reconciled operator_verified on ${reconciled} legacy entry(ies)`);
 }
 
 // ---------- HTTP ----------

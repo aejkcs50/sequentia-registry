@@ -267,11 +267,30 @@ chain mismatch, domain-proof failure), 403 (bad/missing admin token), 409
 
 The current public testnet (re-genesis 2026-07-05) demo assets, the Sequence
 token (tSEQ) and USDX, EURX, GOLD, SILVR, OILX, were issued with
-`contract_hash = 0`, so they cannot pass contract verification. They are seeded
-from `seed/legacy-assets.json` on first run as pre-approved, **unverified**
-entries (`legacy: true`) so their labels still resolve, alongside the BONDX
-OpenAMP demo asset. New assets get full verification. Seeding never overwrites
-an existing entry and still enforces ticker uniqueness.
+`contract_hash = 0`, so they can **never** pass cryptographic chain+domain
+verification. They are seeded from `seed/legacy-assets.json` on first run
+(`legacy: true`) so their labels resolve, alongside the BONDX OpenAMP demo asset
+(which does earn verification the normal way). Seeding never overwrites an
+existing entry's contract and still enforces ticker uniqueness.
+
+### Operator override (`operator_verified`)
+
+A seed entry may set `"operator_verified": true`. The registry **operator** then
+vouches for that entry by fiat: `loadSeed` sets the consumer-facing `verified: 1`
+and records `verified_by: "operator"`, while `verified_chain` and
+`verified_domain` stay `false` so the audit trail never claims a cryptographic
+proof that does not exist. This is reconciled idempotently on every restart (a
+`git pull` that toggles the flag takes effect on the next boot), and it only ever
+touches `legacy` entries that are not chain-verified, so a properly registered
+asset can never be silently overridden.
+
+**This is a testnet convenience only.** On a public or mainnet network, `verified`
+must be earned through `POST /` (on-chain contract match + `.well-known` domain
+proof); an operator override is a deliberate trust shortcut appropriate only when
+the operator issued the demo assets themselves and no real contract exists to
+verify against. The six testnet demo assets above use it because they predate the
+contract scheme; every asset issued with a real `contract_hash` should verify
+cryptographically instead.
 
 ## Running locally
 
