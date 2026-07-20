@@ -6,6 +6,12 @@
     "contract": { "name": "Sequence", "ticker": "tSEQ", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
   },
   {
+    "_comment": "Pegged Bitcoin (SBTC): a normal reissuable Sequentia asset custodied 1:1 by the sbtc-bridge (an application-level BTC multisig bridge, NOT the consensus peg; native BTC stays the distinct privileged asset). Issued with contract_hash = 0, so operator-vouched like the other demo assets. Priced exactly as BTC via the price server's feed_aliases (SBTC -> tBTC).",
+    "asset_id": "288677892fa3ce0d3b0f789b6fc8c4a23fe5271f398c30da60d4827639de3e8b",
+    "operator_verified": true,
+    "contract": { "name": "Pegged Bitcoin", "ticker": "SBTC", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
+  },
+  {
     "asset_id": "2a515539da5e6a60caa7766ecd65bac0c10d15717ddd2088844ba58f4d04b9de",
     "operator_verified": true,
     "contract": { "name": "USD Stablecoin", "ticker": "USDX", "precision": 8, "entity": { "domain": "sequentia.io" }, "issuer_pubkey": "020000000000000000000000000000000000000000000000000000000000000000", "version": 0 }
