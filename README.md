@@ -76,16 +76,18 @@ Anyone can submit metadata for an asset via `POST /`, but it is only stored as
    the submitted asset id. A forged electrs reply cannot decouple the two.
 3. **Domain proof.** The issuer must publish, at
    `https://<entity.domain>/.well-known/sequentia-asset-proof-<asset_id>`,
-   served with `Content-Type: text/plain`, a body that is exactly the line:
+   a body that is exactly the line:
 
    ```
    Authorize linking the domain name <entity.domain> to the Sequentia asset <asset_id>
    ```
 
    The registry fetches this over HTTPS with an SSRF guard (the domain must
-   resolve to a public address). Exact-match plus `text/plain` prevent
-   smuggling the line inside user-generated HTML on a domain the issuer does
-   not control.
+   resolve to a public address). The exact-match on the whole body is what
+   prevents smuggling the line inside user-generated HTML on a domain the
+   issuer does not control. The declared content type may be `text/plain`,
+   `application/octet-stream`, or absent — what extensionless files typically
+   get — but a response declaring itself anything else (HTML, say) is refused.
 
 Tickers are additionally unique first-come, case-insensitive: a registration
 whose ticker is already held by a different asset is rejected with HTTP 409,
@@ -227,7 +229,8 @@ chain mismatch, domain-proof failure), 403 (bad/missing admin token), 409
 
 4. **Publish the domain proof** at
    `https://<entity.domain>/.well-known/sequentia-asset-proof-<asset_id>`,
-   served as `text/plain`, containing exactly:
+   served raw (plain text; no declared content type is fine), containing
+   exactly:
 
    ```
    Authorize linking the domain name <entity.domain> to the Sequentia asset <asset_id>
