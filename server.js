@@ -320,10 +320,16 @@ async function verifyDomainProof(domain, assetId) {
   let r;
   try { r = await fetchUrl(url); } catch (e) { throw httpErr(400, `domain proof fetch failed: ${e.message}`); }
   if (r.status !== 200) throw httpErr(400, `domain proof not found at ${url} (HTTP ${r.status})`);
-  // Require text/plain so an attacker can't smuggle the line inside an HTML page
-  // (e.g. a user-content page) they don't actually control as the proof endpoint.
+  // The exact-body match below is the real proof of control: the response must
+  // BE the line, so a line smuggled into a page the claimant doesn't actually
+  // control can never match. The content type therefore only needs to keep out
+  // responses that declare themselves to be something else entirely (an HTML
+  // page, say). Extensionless files are routinely served with no declared type
+  // at all (Apache omits the header) or as application/octet-stream -- both
+  // accepted, the body decides.
   const ct = (r.contentType || '').split(';')[0].trim().toLowerCase();
-  if (ct !== 'text/plain') throw httpErr(400, `domain proof at ${url} must be served as text/plain (got '${r.contentType || 'none'}')`);
+  if (ct && ct !== 'text/plain' && ct !== 'application/octet-stream')
+    throw httpErr(400, `domain proof at ${url} must be plain text, not '${r.contentType}'`);
   // Require the body to EQUAL the authorization line (trimmed), not merely contain
   // it (MED-2): a substring match let unrelated/attacker-influenced content pass.
   if (r.body.trim() !== proofText(domain, assetId)) throw httpErr(400, `domain proof at ${url} must contain exactly the authorization line and nothing else`);
