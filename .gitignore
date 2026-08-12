@@ -1,0 +1,4 @@
+# Live registry state: one JSON file per asset, written at runtime. It is the
+# server's data, not source, and committing it would publish whatever the
+# running instance happens to hold.
+db/
