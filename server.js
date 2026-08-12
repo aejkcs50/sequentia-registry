@@ -342,6 +342,105 @@ function listIds() { return fs.readdirSync(DB_DIR).filter(f => f.endsWith('.json
 function readEntry(id) { try { return JSON.parse(fs.readFileSync(entryPath(id), 'utf8')); } catch (e) { return null; } }
 function writeEntry(e) { fs.writeFileSync(entryPath(e.asset_id), JSON.stringify(e, null, 2)); }
 function allEntries() { return listIds().map(readEntry).filter(Boolean); }
+
+// ---------- succession ----------
+// An asset's chain-committed contract is immutable: its hash is baked into the
+// asset id, so the name and ticker an asset was issued under can never be
+// rewritten on chain. That is right for provenance and wrong for display in one
+// specific case: a bridged asset that its stablecoin issuer later adopts. The
+// whole point of a bridged-to-native hand-off is that the SAME asset keeps
+// every balance and integration while becoming the issuer's own, and an asset
+// stuck advertising the bridge that minted it cannot do that.
+//
+// A successor record overlays display metadata (name, ticker, domain, issuer
+// key) while preserving the original contract and its hash untouched, so the
+// on-chain binding stays verifiable and the trail records who handed off to
+// whom. It requires BOTH factors, which is what makes it unsquattable:
+//   1. a signature by the CURRENT contract's issuer_pubkey, proving the party
+//      holding the asset's issuing identity consents to the hand-off; and
+//   2. a domain proof from the SUCCESSOR's domain, proving the recipient
+//      controls the identity being claimed.
+// Neither alone suffices: without (1) anyone could rename someone else's asset,
+// and without (2) an issuer could hand its asset to a domain it does not own.
+const SUCCESSION_PREFIX = 'sequentia-asset-succession:v1';
+
+function successionMessage(assetId, newContract) {
+  return `${SUCCESSION_PREFIX}:${assetId}:${contractHash(newContract)}`;
+}
+
+// Build an SPKI DER around a compressed secp256k1 point so Node's own crypto
+// can verify with it; this repo has no dependencies to lean on.
+function spkiFromCompressedPubkey(hex) {
+  const pub = Buffer.from(hex, 'hex');
+  if (pub.length !== 33) throw httpErr(400, 'issuer_pubkey must be a 33-byte compressed key to authorize a succession');
+  const algo = Buffer.from('301006072a8648ce3d020106052b8104000a', 'hex'); // ecPublicKey + secp256k1
+  const bits = Buffer.concat([Buffer.from([0x03, pub.length + 1, 0x00]), pub]);
+  const inner = Buffer.concat([algo, bits]);
+  return Buffer.concat([Buffer.from([0x30, inner.length]), inner]);
+}
+
+function verifySuccessionSignature(pubkeyHex, message, sigHex) {
+  let key;
+  try {
+    key = crypto.createPublicKey({ key: spkiFromCompressedPubkey(pubkeyHex), format: 'der', type: 'spki' });
+  } catch (e) {
+    if (e.status) throw e;
+    throw httpErr(400, `issuer_pubkey is not a usable secp256k1 key: ${e.message}`);
+  }
+  const sig = Buffer.from(String(sigHex), 'hex');
+  if (!sig.length) throw httpErr(400, 'signature: DER hex expected');
+  return crypto.verify('sha256', Buffer.from(message, 'utf8'), key, sig);
+}
+
+// Replace an entry's display metadata, keeping its chain-verified original.
+async function succeed(assetId, newContract, signatureHex) {
+  if (!ASSET_RE.test(assetId)) throw httpErr(400, 'asset_id: 64-hex');
+  const entry = readEntry(assetId);
+  if (!entry) throw httpErr(404, 'not found');
+  const cerrs = validateContract(newContract);
+  if (cerrs.length) throw httpErr(400, 'invalid contract: ' + cerrs.join('; '));
+
+  // Precision is not display metadata: it is committed on chain in the
+  // issuance's denomination and consumers convert amounts with it, so a
+  // successor that changed it would silently misprice every balance.
+  if (newContract.precision !== entry.contract.precision) {
+    throw httpErr(400, `precision cannot change in a succession (asset is ${entry.contract.precision})`);
+  }
+  assertTickerAvailable(newContract.ticker, assetId);
+
+  const current = entry.contract;
+  if (typeof signatureHex !== 'string' || !signatureHex.length) throw httpErr(400, 'signature required');
+  const message = successionMessage(assetId, newContract);
+  if (!verifySuccessionSignature(current.issuer_pubkey, message, signatureHex)) {
+    throw httpErr(403, 'signature does not verify against the current issuer_pubkey');
+  }
+
+  let proof_url = entry.proof_url;
+  let verified_domain = entry.verified_domain;
+  if (REQUIRE_DOMAIN_PROOF) {
+    proof_url = await verifyDomainProof(newContract.entity.domain, assetId);
+    verified_domain = true;
+  }
+
+  // The original contract and its hash stay exactly as issued: the chain
+  // binding is to those bytes and must stay checkable forever.
+  const succession = {
+    at: new Date().toISOString(),
+    from: { name: current.name, ticker: current.ticker, domain: current.entity.domain, issuer_pubkey: current.issuer_pubkey },
+    to: { name: newContract.name, ticker: newContract.ticker, domain: newContract.entity.domain, issuer_pubkey: newContract.issuer_pubkey },
+    message,
+    signature: signatureHex,
+  };
+  entry.origin_contract = entry.origin_contract || current;
+  entry.contract = newContract;
+  entry.successions = (entry.successions || []).concat([succession]);
+  entry.verified_domain = verified_domain;
+  entry.proof_url = proof_url;
+  entry.verified = entry.verified_chain && (verified_domain || !REQUIRE_DOMAIN_PROOF);
+  writeEntry(entry);
+  return entry;
+}
+
 // Liquid-style minimal index consumed by the explorer/wallet/GUI:
 //   id -> [domain, ticker, name, precision, verified]
 // The 5th element (verified: 1/0) is appended (HIGH-5) so consumers (the node's
@@ -524,6 +623,18 @@ const server = http.createServer(async (req, res) => {
       const body = JSON.parse((await readBody(req)) || '{}');
       const entry = await register(body.asset_id, body.contract, {});
       console.log(`[registry] registered ${entry.asset_id} (${entry.contract.ticker}) verified=${entry.verified}`);
+      return send(res, 200, entry);
+    }
+
+    // POST /succeed  { asset_id, contract, signature }
+    // Hand an asset's public identity to a successor: the current issuer signs
+    // the new contract, the successor's domain serves the proof. The asset id,
+    // its original contract and its on-chain binding are untouched.
+    if (req.method === 'POST' && p === '/succeed') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const entry = await succeed(body.asset_id, body.contract, body.signature);
+      const last = entry.successions[entry.successions.length - 1];
+      console.log(`[registry] succeeded ${entry.asset_id}: ${last.from.ticker} (${last.from.domain}) -> ${last.to.ticker} (${last.to.domain})`);
       return send(res, 200, entry);
     }
 
