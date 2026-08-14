@@ -511,7 +511,19 @@ async function succeed(assetId, newContract, signatureHex) {
 // unaffected.
 function minimalIndex() {
   const out = {};
-  for (const e of allEntries()) out[e.asset_id] = [e.contract.entity.domain, e.contract.ticker, e.contract.name, e.contract.precision, e.verified ? 1 : 0];
+  // v[5] is the supervision flag: 1 when the issuer of this asset can freeze
+  // holders of it by consensus rule. It rides in the minimal index rather than
+  // only the full entry because this is the file every wallet and the DEX load
+  // at startup, and a holder has to be told BEFORE they accept the asset, not
+  // when a transfer fails. Absent or 0 means not supervised, so older consumers
+  // that read only v[0..4] are unaffected.
+  for (const e of allEntries()) {
+    out[e.asset_id] = [
+      e.contract.entity.domain, e.contract.ticker, e.contract.name,
+      e.contract.precision, e.verified ? 1 : 0,
+      (e.supervision && e.supervision.supervised) ? 1 : 0,
+    ];
+  }
   return out;
 }
 function fullIndex() { const out = {}; for (const e of allEntries()) out[e.asset_id] = e; return out; }
