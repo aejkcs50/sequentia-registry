@@ -129,9 +129,10 @@ function merkleNode(left /* Buffer32 */, right /* Buffer32 */) {
 //                 order) || vout(uint32 LE)  -- this is SerializeHash(prevout).
 //   entropy = merkleNode( leafPrevout, contract_hash )
 //   asset   = merkleNode( entropy, 0^32 )
-function deriveAssetId(prevoutTxid, prevoutVout, contractHashHex) {
+function deriveAssetId(prevoutTxid, prevoutVout, contractHashHex, descriptorHashHex) {
   if (!/^[0-9a-f]{64}$/.test(prevoutTxid || '')) return null;
   if (!/^[0-9a-f]{64}$/.test(contractHashHex || '')) return null;
+  if (descriptorHashHex != null && !/^[0-9a-f]{64}$/.test(descriptorHashHex)) return null;
   if (!Number.isInteger(prevoutVout) || prevoutVout < 0 || prevoutVout > 0xffffffff) return null;
   // electrs reports txids in display (reversed) order; COutPoint serialises the
   // internal (little-endian) byte order, so reverse the displayed txid.
@@ -145,7 +146,19 @@ function deriveAssetId(prevoutTxid, prevoutVout, contractHashHex) {
   // electrs's display-order value back to natural), which equals Node's
   // SHA256(canonical-JSON(contract)) byte-for-byte, so its raw bytes are the merkle
   // leaf in internal uint256 order.
-  const entropy = merkleNode(leafPrevout, Buffer.from(contractHashHex, 'hex'));
+  // A SUPERVISED asset commits a third leaf, the hash of its supervision
+  // descriptor, so its issuer's freeze keys are part of the asset's identity and
+  // cannot be added, removed or altered afterwards. Without this branch a
+  // supervised asset derives to a different id here and never verifies, which
+  // for the bridged stablecoin would mean it could never be registered at all.
+  //
+  // Three leaves under ComputeFastMerkleRoot reduce to H(H(a,b),c). Checked
+  // against the node's own pinned vector, not assumed: see
+  // Sequentia src/test/supervision_tests.cpp, derivation_vectors_are_pinned.
+  let entropy = merkleNode(leafPrevout, Buffer.from(contractHashHex, 'hex'));
+  if (descriptorHashHex != null) {
+    entropy = merkleNode(entropy, Buffer.from(descriptorHashHex, 'hex'));
+  }
   const assetInternal = merkleNode(entropy, Buffer.alloc(32));
   // CAsset is printed via uint256::GetHex(), which reverses the internal bytes,
   // so reverse to match the displayed asset_id that electrs/RPC/the registry use.
@@ -303,12 +316,61 @@ async function onChainContract(assetId) {
   // order here. Without this, a legitimately-issued OpenAMP asset never verifies.
   if (!/^[0-9a-f]{64}$/.test(iss.contract_hash || ''))
     throw httpErr(400, 'issuance input has no valid contract_hash on chain');
+  // Is this a supervised asset? The declaration rides in an output of the very
+  // transaction we already have, so this costs no extra fetch.
+  let supervision = null;
+  for (const out of (tx.vout || [])) {
+    const parsed = parseSupervisionScript(out.scriptpubkey);
+    if (parsed) { supervision = parsed; break; }
+  }
+
   return {
     contract_hash: Buffer.from(iss.contract_hash, 'hex').reverse().toString('hex'),
     issuance_txid: itx.txid,
     prevout_txid: vin.txid,
     prevout_vout: vin.vout,
+    supervision,
   };
+}
+
+// ---------- supervision ----------
+// A supervised asset is one whose issuer can freeze holders by consensus rule
+// (Sequentia src/supervision.h). The terms are declared in an output of the
+// issuance transaction AND committed in the asset id, so what we read here is
+// not a claim: deriveAssetId re-derives over it, and an issuance that misstates
+// its own terms simply fails to verify.
+//
+// Script shape, from BuildSupervisionScript:
+//   <"SEQSUP"> OP_DROP <asset:32> OP_DROP <descriptor:67> OP_DROP OP_RETURN
+const SUPERVISION_SCRIPT_RE =
+  /^06534551535550752[0]([0-9a-f]{64})7543([0-9a-f]{134})756a$/;
+
+function parseSupervisionScript(scriptHex) {
+  const m = SUPERVISION_SCRIPT_RE.exec((scriptHex || '').toLowerCase());
+  if (!m) return null;
+  const descriptorHex = m[2];
+  const bytes = Buffer.from(descriptorHex, 'hex');
+  // version(1) || feature_bits(2, LE) || operational(32) || recovery(32)
+  const version = bytes[0];
+  const featureBits = bytes.readUInt16LE(1);
+  return {
+    asset_id: Buffer.from(m[1], 'hex').reverse().toString('hex'),
+    descriptor_hex: descriptorHex,
+    version,
+    feature_bits: featureBits,
+    operational_key: bytes.slice(3, 35).toString('hex'),
+    recovery_key: bytes.slice(35, 67).toString('hex'),
+    // Bit 1 is the only implemented capability: an asset-wide pause.
+    pause_allowed: (featureBits & 0x0002) !== 0,
+  };
+}
+
+// The descriptor's hash as consensus computes it: SerializeHash over the 67
+// canonical bytes, which is a DOUBLE SHA256 (CHashWriter::GetHash), like the
+// prevout leaf above and unlike the contract hash.
+function supervisionDescriptorHash(descriptorHex) {
+  const sha = (b) => crypto.createHash('sha256').update(b).digest();
+  return sha(sha(Buffer.from(descriptorHex, 'hex'))).toString('hex');
 }
 
 // ---------- domain proof ----------
@@ -493,18 +555,29 @@ async function register(assetId, contract, opts = {}) {
   // legacy tickers. Re-registering the SAME asset (refresh) keeps its ticker.
   assertTickerAvailable(contract.ticker, assetId);
 
-  let issuance_txid = null, verified_chain = false;
+  let issuance_txid = null, verified_chain = false, supervision = null;
   if (!opts.legacy) {
     const oc = await onChainContract(assetId);
     issuance_txid = oc.issuance_txid;
+    supervision = oc.supervision;
     if (oc.contract_hash !== ch)
       throw httpErr(400, `contract does not match on-chain commitment: on-chain contract_hash=${oc.contract_hash}, SHA256(contract)=${ch}. The asset must have been issued with this exact contract.`);
     // MED-3: in addition to the SHA256 contract_hash check, re-derive the asset
     // id from (issuance prevout, contract_hash) and require it equals the
     // submitted asset_id, so a forged electrs reply cannot decouple them.
-    const derived = deriveAssetId(oc.prevout_txid, oc.prevout_vout, oc.contract_hash);
+    // A supervised asset commits its freeze terms as a third leaf, so the
+    // derivation must include them or it will not reproduce the id. This is
+    // also what makes the supervision fields below trustworthy: they are the
+    // ones the id was derived over, not whatever the declaration output claims.
+    const descriptorHash = supervision
+      ? supervisionDescriptorHash(supervision.descriptor_hex)
+      : null;
+    const derived = deriveAssetId(oc.prevout_txid, oc.prevout_vout, oc.contract_hash, descriptorHash);
     if (derived === null) {
       throw httpErr(400, 'could not re-derive asset id from issuance prevout (incomplete on-chain data)');
+    }
+    if (supervision && supervision.asset_id !== assetId) {
+      throw httpErr(400, `supervision declaration names a different asset (${supervision.asset_id})`);
     }
     if (derived !== assetId) {
       throw httpErr(400, `asset id does not match its on-chain derivation: derived=${derived}, submitted=${assetId}`);
@@ -528,6 +601,17 @@ async function register(assetId, contract, opts = {}) {
     verified_domain,
     legacy: !!opts.legacy,
     proof_url,
+    // Whether the issuer can freeze holders of this asset. Published because a
+    // holder deciding whether to accept it needs to know BEFORE they do, and
+    // because every wallet and the DEX read this registry rather than the chain.
+    // Null for a legacy entry, where nothing was verified against the chain.
+    supervision: supervision ? {
+      supervised: true,
+      version: supervision.version,
+      operational_key: supervision.operational_key,
+      recovery_key: supervision.recovery_key,
+      pause_allowed: supervision.pause_allowed,
+    } : (opts.legacy ? null : { supervised: false }),
   };
   writeEntry(entry);
   return entry;
