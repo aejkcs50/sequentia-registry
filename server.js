@@ -568,6 +568,25 @@ async function register(assetId, contract, opts = {}) {
   assertTickerAvailable(contract.ticker, assetId);
 
   let issuance_txid = null, verified_chain = false, supervision = null;
+
+  // Supervision is read from the chain even for a LEGACY entry, and that is
+  // deliberate. Whether an asset's issuer can freeze its holders is an
+  // objective fact about the chain; whether the issuer proved control of a
+  // domain is a different question entirely. Withholding the first because the
+  // second failed would leave a holder of an unverified asset less informed
+  // than a holder of a verified one, which is exactly backwards: the
+  // unverified asset is the one to be careful with.
+  //
+  // Best effort, because a legacy entry must still register when electrs is
+  // unreachable. Left null when it cannot be determined, which reads as
+  // "unknown" rather than "no".
+  if (opts.legacy) {
+    try {
+      const oc = await onChainContract(assetId);
+      if (oc.supervision && oc.supervision.asset_id === assetId) supervision = oc.supervision;
+    } catch (e) { /* unknown, not "no" */ }
+  }
+
   if (!opts.legacy) {
     const oc = await onChainContract(assetId);
     issuance_txid = oc.issuance_txid;
@@ -623,7 +642,7 @@ async function register(assetId, contract, opts = {}) {
       operational_key: supervision.operational_key,
       recovery_key: supervision.recovery_key,
       pause_allowed: supervision.pause_allowed,
-    } : (opts.legacy ? null : { supervised: false }),
+    } : (opts.legacy && !verified_chain ? null : { supervised: false }),
   };
   writeEntry(entry);
   return entry;
