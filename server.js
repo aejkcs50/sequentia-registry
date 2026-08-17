@@ -253,8 +253,18 @@ function validateOpenAmp(o) {
     if (typeof o.verifier_asset !== 'string' || !ASSET_RE.test(o.verifier_asset)) errs.push('openamp.verifier_asset: 64-hex asset id');
     if (!Number.isInteger(o.verifier_amount) || o.verifier_amount <= 0) errs.push('openamp.verifier_amount: integer > 0');
     if (typeof o.issuer_update_key !== 'string' || !XONLY_RE.test(o.issuer_update_key)) errs.push('openamp.issuer_update_key: 32-byte x-only hex');
-    if (typeof o.genesis_policy !== 'string' || !/^[0-9a-f]{64}$/.test(o.genesis_policy)) errs.push('openamp.genesis_policy: 64-hex commitment');
-    if (typeof o.genesis_snapshot_hash !== 'string' || !/^[0-9a-f]{64}$/.test(o.genesis_snapshot_hash)) errs.push('openamp.genesis_snapshot_hash: 64-hex');
+    // genesis_policy / genesis_snapshot_hash are OPTIONAL, and a damp contract
+    // should not carry them at all. An earlier draft of the design required
+    // them; that cannot work, because pi commits to the asset id and the asset
+    // id commits to this contract, so a contract carrying pi would have to
+    // contain a hash of itself. The corrected design (opendamp-design.md
+    // section 5) authenticates the genesis policy by the snapshot's issuer
+    // signature and by the verifier output on chain instead. Values are still
+    // accepted and shape-checked so any contract already committed with them
+    // stays registerable: the contract_hash covers the exact bytes, so the
+    // registry may never strip a field post hoc.
+    if (o.genesis_policy !== undefined && !/^[0-9a-f]{64}$/.test(String(o.genesis_policy))) errs.push('openamp.genesis_policy: 64-hex commitment');
+    if (o.genesis_snapshot_hash !== undefined && !/^[0-9a-f]{64}$/.test(String(o.genesis_snapshot_hash))) errs.push('openamp.genesis_snapshot_hash: 64-hex');
   } else {
     for (const f of dampFields) if (o[f] !== undefined) errs.push(`openamp.${f}: only valid with enforcement "damp"`);
   }
