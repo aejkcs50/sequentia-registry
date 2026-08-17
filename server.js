@@ -190,11 +190,28 @@ function validateContract(c) {
   // registrar/transfer-agent operating the policy server); the contract_hash
   // commits to the whole document, so the registry must accept those exact bytes
   // to verify the on-chain binding rather than strip them post-hoc.
-  const allowed = new Set(['name', 'ticker', 'precision', 'entity', 'issuer_pubkey', 'version', 'openamp', 'operator']);
+  const allowed = new Set(['name', 'ticker', 'precision', 'entity', 'issuer_pubkey', 'version', 'openamp', 'operator', 'supervision']);
   for (const k of Object.keys(c)) if (!allowed.has(k)) errs.push(`unexpected field: ${k}`);
   if (c.entity) for (const k of Object.keys(c.entity)) if (k !== 'domain' && k !== 'issuer') errs.push(`unexpected entity field: ${k}`);
   if (c.entity && c.entity.issuer !== undefined && typeof c.entity.issuer !== 'string') errs.push('entity.issuer: string');
   if (c.operator !== undefined) errs.push(...validateOperator(c.operator));
+  // Optional supervision block: a supervised (issuer-freezable) asset may
+  // restate its descriptor in the contract for discoverability. The chain's
+  // declaration output is the authority (it is committed in the asset id);
+  // register() cross-checks this block against the on-chain descriptor and
+  // refuses a contract that misstates it.
+  if (c.supervision !== undefined) errs.push(...validateSupervisionContractBlock(c.supervision));
+  return errs;
+}
+
+function validateSupervisionContractBlock(s) {
+  const errs = [];
+  if (!s || typeof s !== 'object') return ['supervision: must be an object'];
+  if (typeof s.operational_key !== 'string' || !XONLY_RE.test(s.operational_key)) errs.push('supervision.operational_key: 32-byte x-only hex');
+  if (typeof s.recovery_key !== 'string' || !XONLY_RE.test(s.recovery_key)) errs.push('supervision.recovery_key: 32-byte x-only hex');
+  if (!Number.isInteger(s.feature_bits) || s.feature_bits < 0 || s.feature_bits > 0xffff) errs.push('supervision.feature_bits: integer 0..65535');
+  const allowed = new Set(['operational_key', 'recovery_key', 'feature_bits']);
+  for (const k of Object.keys(s)) if (!allowed.has(k)) errs.push(`unexpected supervision field: ${k}`);
   return errs;
 }
 
@@ -221,7 +238,22 @@ function validateOpenAmp(o) {
     if (!Array.isArray(o.policy_endpoints) || !o.policy_endpoints.every(e => typeof e === 'string' && /^https:\/\//.test(e)))
       errs.push('openamp.policy_endpoints: array of https urls');
   }
-  const allowed = new Set(['version', 'type', 'policy_pubkey', 'clawback', 'burn_allowed', 'confidential', 'policy_endpoints', 'terms_hash']);
+  // Enforcement election (opendamp-design.md section 5). Absent means the
+  // co-signed model; "damp" marks a network-enforced asset and requires the
+  // verifier binding fields, which the asset id then commits to.
+  if (o.enforcement !== undefined && o.enforcement !== 'cosign' && o.enforcement !== 'damp')
+    errs.push('openamp.enforcement: "cosign" | "damp"');
+  const dampFields = ['verifier_asset', 'verifier_amount', 'issuer_update_key', 'genesis_policy', 'genesis_snapshot_hash'];
+  if (o.enforcement === 'damp') {
+    if (typeof o.verifier_asset !== 'string' || !ASSET_RE.test(o.verifier_asset)) errs.push('openamp.verifier_asset: 64-hex asset id');
+    if (!Number.isInteger(o.verifier_amount) || o.verifier_amount <= 0) errs.push('openamp.verifier_amount: integer > 0');
+    if (typeof o.issuer_update_key !== 'string' || !XONLY_RE.test(o.issuer_update_key)) errs.push('openamp.issuer_update_key: 32-byte x-only hex');
+    if (typeof o.genesis_policy !== 'string' || !/^[0-9a-f]{64}$/.test(o.genesis_policy)) errs.push('openamp.genesis_policy: 64-hex commitment');
+    if (typeof o.genesis_snapshot_hash !== 'string' || !/^[0-9a-f]{64}$/.test(o.genesis_snapshot_hash)) errs.push('openamp.genesis_snapshot_hash: 64-hex');
+  } else {
+    for (const f of dampFields) if (o[f] !== undefined) errs.push(`openamp.${f}: only valid with enforcement "damp"`);
+  }
+  const allowed = new Set(['version', 'type', 'policy_pubkey', 'clawback', 'burn_allowed', 'confidential', 'policy_endpoints', 'terms_hash', 'enforcement', ...dampFields]);
   for (const k of Object.keys(o)) if (!allowed.has(k)) errs.push(`unexpected openamp field: ${k}`);
   return errs;
 }
@@ -612,6 +644,17 @@ async function register(assetId, contract, opts = {}) {
     }
     if (derived !== assetId) {
       throw httpErr(400, `asset id does not match its on-chain derivation: derived=${derived}, submitted=${assetId}`);
+    }
+    // A contract that restates its supervision terms must restate them truly.
+    // The chain's declaration is what the asset id was derived over; a contract
+    // block that disagrees with it, or claims supervision the chain does not
+    // declare, is refused rather than published.
+    if (contract.supervision) {
+      if (!supervision) throw httpErr(400, 'contract claims supervision but the issuance declares none');
+      if (contract.supervision.operational_key !== supervision.operational_key
+        || contract.supervision.recovery_key !== supervision.recovery_key
+        || contract.supervision.feature_bits !== supervision.feature_bits)
+        throw httpErr(400, 'contract supervision block does not match the on-chain declaration');
     }
     verified_chain = true;
   }
