@@ -190,7 +190,11 @@ function validateContract(c) {
   // registrar/transfer-agent operating the policy server); the contract_hash
   // commits to the whole document, so the registry must accept those exact bytes
   // to verify the on-chain binding rather than strip them post-hoc.
-  const allowed = new Set(['name', 'ticker', 'precision', 'entity', 'issuer_pubkey', 'version', 'openamp', 'operator', 'supervision']);
+  // terms_hash at top level: a bearer (supervised) issuance has no openamp
+  // block to carry it, but its contract must still commit to the offering
+  // terms, so the binding rides at the top level and the registry must accept
+  // those exact bytes to verify the on-chain commitment.
+  const allowed = new Set(['name', 'ticker', 'precision', 'entity', 'issuer_pubkey', 'version', 'openamp', 'operator', 'supervision', 'terms_hash']);
   for (const k of Object.keys(c)) if (!allowed.has(k)) errs.push(`unexpected field: ${k}`);
   if (c.entity) for (const k of Object.keys(c.entity)) if (k !== 'domain' && k !== 'issuer') errs.push(`unexpected entity field: ${k}`);
   if (c.entity && c.entity.issuer !== undefined && typeof c.entity.issuer !== 'string') errs.push('entity.issuer: string');
@@ -201,6 +205,7 @@ function validateContract(c) {
   // register() cross-checks this block against the on-chain descriptor and
   // refuses a contract that misstates it.
   if (c.supervision !== undefined) errs.push(...validateSupervisionContractBlock(c.supervision));
+  if (c.terms_hash !== undefined && !/^[0-9a-f]{64}$/.test(String(c.terms_hash))) errs.push('terms_hash: 64-hex');
   return errs;
 }
 
