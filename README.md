@@ -29,7 +29,7 @@ node server.js
 | [`openamp`](https://github.com/GracedEternalKingCabbageMan/openamp) | OpenAMP: open-source restricted-asset issuance/transfer-approval service (an AMP2 equivalent) with opt-in confidentiality; zero consensus changes. Restricted assets carry an `openamp` block in their registry contract. |
 
 Umbrella protocol documentation:
-[`Sequentia/doc/sequentia/`](https://github.com/GracedEternalKingCabbageMan/Sequentia/tree/claude/sequentia-bitcoin-sidechain-w6xady/doc/sequentia).
+[`Sequentia/doc/sequentia/`](https://github.com/GracedEternalKingCabbageMan/Sequentia/tree/master/doc/sequentia).
 
 ## Status and live instance
 
