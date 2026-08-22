@@ -18,8 +18,9 @@ curl -s http://localhost:3005/health
 curl -s http://localhost:3005/index.minimal.json
 ```
 
-No `npm install`. **There is no automated test suite** — verify changes with those smoke
-commands, and for anything touching the verification path, against a local electrs.
+No `npm install`. The only automated test is `node tools/succession-smoke.js`, which covers
+`POST /succeed` end to end on a temporary DB. Verify everything else with those smoke commands,
+and for anything touching the verification path, against a local electrs.
 
 Configuration is environment only: `PORT`, `DB_DIR`, `SEED_FILE`, `SEQ_ELECTRS_URL`,
 `REQUIRE_DOMAIN_PROOF`, `PROOF_FETCH_TIMEOUT`, `ADMIN_TOKEN`. `ADMIN_TOKEN` is never written to
@@ -75,8 +76,7 @@ chain-verified registration can never be downgraded.
   proof, which reaches arbitrary issuer-supplied hosts.
 - The native token is named **Sequence** (ticker SEQ, tSEQ on testnet). **Sequentia** is the
   network. They are different names; never use "SEQ" to mean the network.
-- **There is no `.gitignore` in this repo**, and the live `db/` directory sits untracked at the
-  root. A careless `git add -A` would commit registry state. Add paths explicitly.
+- `db/` is the live registry state and is listed in `.gitignore`; never force-add it.
 
 ## Who talks to it
 
