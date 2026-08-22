@@ -321,12 +321,12 @@ token (tSEQ), USDX, EURX, GOLD, SILVR, OILX, and SBTC, were issued with
 `contract_hash = 0`, so they can **never** pass cryptographic chain+domain
 verification. They are seeded from `seed/legacy-assets.json` on first run
 (`legacy: true`) so their labels resolve, alongside the BONDX OpenAMP demo asset
-(which does earn verification the normal way). SBTC is an ordinary reissuable
-Sequentia asset custodied 1:1 by the opt-in, application-level
-[sbtc-bridge](https://github.com/GracedEternalKingCabbageMan/sbtc-bridge); it
-is not a consensus peg, and native Bitcoin remains a distinct asset in every
-wallet. Seeding never overwrites an existing entry's contract and still
-enforces ticker uniqueness.
+(which does earn verification the normal way). SBTC is pegged bitcoin: 1:1
+BTC held in the
+[sbtc-bridge](https://github.com/GracedEternalKingCabbageMan/sbtc-bridge)
+reserve, an ordinary unprivileged reissuable asset, not Elements' consensus
+peg; native Bitcoin remains a distinct asset in every wallet. Seeding never
+overwrites an existing entry's contract and still enforces ticker uniqueness.
 
 ### Operator override (`operator_verified`)
 
