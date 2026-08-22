@@ -15,13 +15,13 @@ node server.js
 ```
 
 > **Testnet software.** Everything here serves the public Sequentia testnet
-> (parent chain: Bitcoin testnet4). There is no mainnet.
+> (parent chain: Bitcoin testnet4). No mainnet is running yet.
 
 ## Where this fits in the Sequentia ecosystem
 
 | Repo | One-liner |
 |---|---|
-| [`Sequentia`](https://github.com/GracedEternalKingCabbageMan/Sequentia) | The Sequentia node (`elementsd` fork of Elements 23.3.3): consensus, anchoring, proof of stake, open fee market, plus the canonical protocol documentation in `doc/sequentia/`. |
+| [`Sequentia`](https://github.com/GracedEternalKingCabbageMan/Sequentia) | The Sequentia node (`sequentiad`, a fork of Elements 23.3.3): consensus, anchoring, proof of stake, open fee market, plus the canonical protocol documentation in `doc/sequentia/`. |
 | [`sequentia-electrs`](https://github.com/GracedEternalKingCabbageMan/sequentia-electrs) | The electrs fork: Rust indexer + Esplora REST API for Sequentia and its Bitcoin testnet4 parent chain. The registry uses it for on-chain verification. |
 | [`sequentia-explorer`](https://github.com/GracedEternalKingCabbageMan/sequentia-explorer) | Sequentia block explorer frontend (esplora fork); the indexer lives in sequentia-electrs. Its public server also proxies this registry. |
 | [`SWK`](https://github.com/GracedEternalKingCabbageMan/SWK) | Sequentia Wallet Kit: a fork of Blockstream LWK, a Rust wallet library, CLI, and WASM bindings for building Sequentia (and Bitcoin testnet4) wallets. |
@@ -124,12 +124,16 @@ Validation rules (from `validateContract` in `server.js`):
 | `name` | string, 1..255 chars |
 | `ticker` | 1..12 chars of `A-Za-z0-9.-` (mixed case allowed, e.g. `tSEQ`) |
 | `precision` | integer 0..8 |
-| `entity.domain` | valid DNS domain; no other `entity` fields allowed |
+| `entity.domain` | valid DNS domain |
+| `entity.issuer` | optional string (the issuing entity's name); no other `entity` fields allowed |
 | `issuer_pubkey` | 33-byte compressed pubkey hex, or 32-byte x-only hex (BIP340, used by OpenAMP enclave keys); an all-zeros X coordinate is rejected |
 | `version` | must be `0` |
 | `openamp` | optional, see below |
+| `operator` | optional `{ "name", "registration" }`, both strings (the registrar or transfer agent operating a policy server) |
+| `supervision` | optional `{ "operational_key", "recovery_key", "feature_bits" }`: the two keys as 32-byte x-only hex, `feature_bits` an integer 0..65535. A supervised (issuer-freezable) asset may restate its on-chain supervision descriptor here; registration cross-checks it against the issuance's declaration and rejects a contract that misstates it or claims supervision the chain does not declare. See `doc/sequentia/supervised-assets.md` in the node repo. |
+| `terms_hash` | optional 64-hex commitment to the offering terms (top level, for supervised issuances that carry no `openamp` block) |
 
-Unknown top-level keys are rejected so the canonical hash is well-defined.
+Any other top-level key is rejected so the canonical hash is well-defined.
 
 **Canonical hashing.** Issuers must replicate this exactly so the on-chain
 `contract_hash` matches: serialize the contract as JSON with object keys sorted
@@ -170,21 +174,26 @@ Errors are `{ "error": "<message>" }` with an appropriate 4xx/5xx status.
 | GET | `/` | All registered entries (array) |
 | GET | `/<asset_id>` | One entry (404 if unknown) |
 | GET | `/index.json` | `{ asset_id: entry }` |
-| GET | `/index.minimal.json` | `{ asset_id: [domain, ticker, name, precision, verified] }`, the format consumers use |
+| GET | `/index.minimal.json` | `{ asset_id: [domain, ticker, name, precision, verified, supervised] }`, the format consumers use |
 | GET | `/health` | `{ ok, count, electrs }` |
 | POST | `/` | Submit `{ asset_id, contract }`: runs all verifications, then registers |
+| POST | `/succeed` | Submit `{ asset_id, contract, signature }`: hand the asset's display identity to a successor (see "Succession") |
 | POST | `/admin/seed` | (bearer `ADMIN_TOKEN`) add a pre-approved entry, skipping chain and domain checks |
 
 `index.minimal.json` entry example (live):
 
 ```json
 "8d1dbf45af45dd18eac10215efb86386695b9c4122ce6f4c18e03fea155e86c7": [
-  "sequentiatestnet.com", "BONDX", "OpenAMP Demo Bond", 8, 0
+  "sequentiatestnet.com", "BONDX", "OpenAMP Demo Bond", 8, 0, 0
 ]
 ```
 
-The 5th element is the `verified` flag (1/0). Consumers that only read
-elements 0..3 (the old Liquid `assets.minimal.json` shape) are unaffected.
+The 5th element is the `verified` flag (1/0). The 6th is `supervised` (1/0):
+1 when the issuer can freeze holders of the asset by consensus rule; absent or
+0 means not supervised. It rides in the minimal index because that is the file
+every wallet loads at startup, and a holder has to be told before accepting
+the asset. Consumers that only read elements 0..3 (the old Liquid
+`assets.minimal.json` shape) are unaffected.
 
 A full entry (`GET /<asset_id>`) looks like:
 
@@ -198,13 +207,22 @@ A full entry (`GET /<asset_id>`) looks like:
   "verified_chain": true,
   "verified_domain": true,
   "legacy": false,
-  "proof_url": "https://<domain>/.well-known/sequentia-asset-proof-<asset_id>"
+  "proof_url": "https://<domain>/.well-known/sequentia-asset-proof-<asset_id>",
+  "supervision": { "supervised": false }
 }
 ```
 
+`supervision` is read from the chain at registration: `{ "supervised": true,
+"version", "operational_key", "recovery_key", "pause_allowed" }` for a
+supervised asset, `{ "supervised": false }` otherwise, `null` for a seeded
+legacy entry. An entry that has been handed to a successor additionally
+carries `origin_contract` (the contract as issued) and `successions[]` (see
+"Succession").
+
 Request bodies are capped at 256 KB. POST failure statuses: 400 (validation,
-chain mismatch, domain-proof failure), 403 (bad/missing admin token), 409
-(ticker already claimed or reserved).
+chain mismatch, domain-proof failure), 403 (bad/missing admin token, or a
+succession signature that does not verify), 404 (succession of an unknown
+asset), 409 (ticker already claimed or reserved).
 
 ## Registering an asset, step by step
 
@@ -247,9 +265,39 @@ chain mismatch, domain-proof failure), 403 (bad/missing admin token), 409
    The response is the stored entry; check that `verified` is `true`.
    Re-submitting the same asset (a refresh) is allowed and keeps its ticker.
 
+## Succession (`POST /succeed`)
+
+An asset's chain-committed contract is immutable: its hash is part of the
+asset id, so the name and ticker an asset was issued under can never be
+rewritten on chain. A bridged asset that its stablecoin issuer later adopts
+still needs to keep every balance and integration while becoming the issuer's
+own, so the registry lets the *display* identity (name, ticker, domain,
+issuer key) be handed to a successor while the original contract and its hash
+stay exactly as issued.
+
+`POST /succeed` takes `{ asset_id, contract, signature }` and requires both
+factors, which is what makes it unsquattable:
+
+1. `signature` is a DER ECDSA signature by the **current** contract's
+   `issuer_pubkey` (which must be a 33-byte compressed key) over the UTF-8
+   message `sequentia-asset-succession:v1:<asset_id>:<contract_hash of the
+   new contract>`, hashed with SHA-256;
+2. the **successor's** `entity.domain` serves the usual `.well-known` proof
+   for the asset (skipped only when `REQUIRE_DOMAIN_PROOF=0`).
+
+The new contract passes the normal validation, must keep the asset's
+`precision` (it is committed on chain and consumers convert amounts with it),
+and its ticker must be free. On success the entry's `contract` is replaced,
+`origin_contract` keeps the contract as issued, and a record `{ at, from, to,
+message, signature }` is appended to `successions[]`.
+
+`tools/sign-succession.js <asset_id> <new-contract.json> <privkey>` produces
+the signature (the key as 64-hex or WIF; on a shared machine pass it via
+`SUCCESSION_PRIVKEY` in the environment instead of the command line).
+
 ## Consumers
 
-- **Sequentia node**: start `elementsd` with `-assetregistryurl=<index url>`;
+- **Sequentia node**: start `sequentiad` with `-assetregistryurl=<index url>`;
   the node fetches the minimal index shortly after startup and then every
   `-assetregistrypoll` seconds (default 300) and merges the tickers of
   **verified** entries into its asset directory (RPC output and the GUI).
@@ -269,12 +317,16 @@ chain mismatch, domain-proof failure), 403 (bad/missing admin token), 409
 ## Seeded testnet assets
 
 The current public testnet (re-genesis 2026-07-05) demo assets, the Sequence
-token (tSEQ) and USDX, EURX, GOLD, SILVR, OILX, were issued with
+token (tSEQ), USDX, EURX, GOLD, SILVR, OILX, and SBTC, were issued with
 `contract_hash = 0`, so they can **never** pass cryptographic chain+domain
 verification. They are seeded from `seed/legacy-assets.json` on first run
 (`legacy: true`) so their labels resolve, alongside the BONDX OpenAMP demo asset
-(which does earn verification the normal way). Seeding never overwrites an
-existing entry's contract and still enforces ticker uniqueness.
+(which does earn verification the normal way). SBTC is an ordinary reissuable
+Sequentia asset custodied 1:1 by the opt-in, application-level
+[sbtc-bridge](https://github.com/GracedEternalKingCabbageMan/sbtc-bridge); it
+is not a consensus peg, and native Bitcoin remains a distinct asset in every
+wallet. Seeding never overwrites an existing entry's contract and still
+enforces ticker uniqueness.
 
 ### Operator override (`operator_verified`)
 
@@ -291,8 +343,8 @@ asset can never be silently overridden.
 must be earned through `POST /` (on-chain contract match + `.well-known` domain
 proof); an operator override is a deliberate trust shortcut appropriate only when
 the operator issued the demo assets themselves and no real contract exists to
-verify against. The six testnet demo assets above use it because they predate the
-contract scheme; every asset issued with a real `contract_hash` should verify
+verify against. The seven testnet demo assets above use it because they predate
+the contract scheme; every asset issued with a real `contract_hash` should verify
 cryptographically instead.
 
 ## Running locally
@@ -346,9 +398,14 @@ Repo layout:
 
 - `server.js`: the entire service (HTTP API, canonical-JSON hashing, asset-id
   derivation, electrs lookups, domain-proof fetch with SSRF guard, flat-file
-  store, seeding).
+  store, seeding, succession).
 - `seed/legacy-assets.json`: pre-approved entries loaded on first run.
+- `tools/sign-succession.js`: signs a succession with the current issuer key.
+- `tools/succession-smoke.js`: self-contained end-to-end test of succession
+  (starts a registry on a temporary DB with domain proofs off, seeds an entry,
+  exercises the hand-off and its refusals).
+- `db/`: the live registry state, ignored by version control; never force-add it.
 
-There is no automated test suite; verify changes with the smoke commands above
-(and, for verification-path changes, against a local electrs). Open PRs against
-the `main` branch.
+The only automated test is `node tools/succession-smoke.js`; verify other
+changes with the smoke commands above (and, for verification-path changes,
+against a local electrs). Open PRs against the `main` branch.
