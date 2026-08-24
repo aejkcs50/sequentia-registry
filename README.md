@@ -21,15 +21,15 @@ node server.js
 
 | Repo | One-liner |
 |---|---|
-| [`Sequentia`](https://github.com/GracedEternalKingCabbageMan/Sequentia) | The Sequentia node (`sequentiad`, a fork of Elements 23.3.3): consensus, anchoring, proof of stake, open fee market, plus the canonical protocol documentation in `doc/sequentia/`. |
-| [`sequentia-electrs`](https://github.com/GracedEternalKingCabbageMan/sequentia-electrs) | The electrs fork: Rust indexer + Esplora REST API for Sequentia and its Bitcoin testnet4 parent chain. The registry uses it for on-chain verification. |
-| [`sequentia-explorer`](https://github.com/GracedEternalKingCabbageMan/sequentia-explorer) | Sequentia block explorer frontend (esplora fork); the indexer lives in sequentia-electrs. Its public server also proxies this registry. |
-| [`SWK`](https://github.com/GracedEternalKingCabbageMan/SWK) | Sequentia Wallet Kit: a fork of Blockstream LWK, a Rust wallet library, CLI, and WASM bindings for building Sequentia (and Bitcoin testnet4) wallets. |
-| [`sequentia-web-wallet`](https://github.com/GracedEternalKingCabbageMan/sequentia-web-wallet) | Proof-of-concept browser wallet built on SWK, live at https://sequentiatestnet.com/wallet. Reads its asset labels from this registry. |
-| [`openamp`](https://github.com/GracedEternalKingCabbageMan/openamp) | OpenAMP: open-source restricted-asset issuance/transfer-approval service (an AMP2 equivalent) with opt-in confidentiality; zero consensus changes. Restricted assets carry an `openamp` block in their registry contract. |
+| [`Sequentia`](https://github.com/ConcatenaLabs/Sequentia) | The Sequentia node (`sequentiad`, a fork of Elements 23.3.3): consensus, anchoring, proof of stake, open fee market, plus the canonical protocol documentation in `doc/sequentia/`. |
+| [`sequentia-electrs`](https://github.com/ConcatenaLabs/sequentia-electrs) | The electrs fork: Rust indexer + Esplora REST API for Sequentia and its Bitcoin testnet4 parent chain. The registry uses it for on-chain verification. |
+| [`sequentia-explorer`](https://github.com/ConcatenaLabs/sequentia-explorer) | Sequentia block explorer frontend (esplora fork); the indexer lives in sequentia-electrs. Its public server also proxies this registry. |
+| [`SWK`](https://github.com/ConcatenaLabs/SWK) | Sequentia Wallet Kit: a fork of Blockstream LWK, a Rust wallet library, CLI, and WASM bindings for building Sequentia (and Bitcoin testnet4) wallets. |
+| [`sequentia-web-wallet`](https://github.com/ConcatenaLabs/sequentia-web-wallet) | Proof-of-concept browser wallet built on SWK, live at https://sequentiatestnet.com/wallet. Reads its asset labels from this registry. |
+| [`openamp`](https://github.com/ConcatenaLabs/openamp) | OpenAMP: open-source restricted-asset issuance/transfer-approval service (an AMP2 equivalent) with opt-in confidentiality; zero consensus changes. Restricted assets carry an `openamp` block in their registry contract. |
 
 Umbrella protocol documentation:
-[`Sequentia/doc/sequentia/`](https://github.com/GracedEternalKingCabbageMan/Sequentia/tree/master/doc/sequentia).
+[`Sequentia/doc/sequentia/`](https://github.com/ConcatenaLabs/Sequentia/tree/master/doc/sequentia).
 
 ## Status and live instance
 
@@ -41,7 +41,7 @@ https://sequentiatestnet.com/registry/
 
 (The explorer's public server proxies the `/registry` path to the registry
 process; see `serve-public.js` in
-[sequentia-explorer](https://github.com/GracedEternalKingCabbageMan/sequentia-explorer).)
+[sequentia-explorer](https://github.com/ConcatenaLabs/sequentia-explorer).)
 
 Quick check:
 
@@ -159,7 +159,7 @@ Rules: `version` integer >= 1; `type` is `"restricted"` or `"tracked"`;
 `policy_pubkey` is 32-byte x-only hex; `clawback` boolean; optional
 `burn_allowed` and `confidential` booleans; optional `policy_endpoints` array
 of https URLs; optional `terms_hash`. See
-[`openamp/spec/contract-v1.md`](https://github.com/GracedEternalKingCabbageMan/openamp/blob/main/spec/contract-v1.md)
+[`openamp/spec/contract-v1.md`](https://github.com/ConcatenaLabs/openamp/blob/main/spec/contract-v1.md)
 for the full semantics. The seeded BONDX demo asset is an example.
 
 ## API
@@ -304,7 +304,7 @@ the signature (the key as 64-hex or WIF; on a shared machine pass it via
   Unverified/legacy entries are skipped by the node. On the public testnet the
   node defaults this to the live registry index. Operator `-assetdir` entries
   always take precedence. See `src/assetregistry.{h,cpp}` in the
-  [Sequentia](https://github.com/GracedEternalKingCabbageMan/Sequentia) repo.
+  [Sequentia](https://github.com/ConcatenaLabs/Sequentia) repo.
 - **Block explorer**: the explorer's public server proxies `/registry` to this
   service, and the `sequentia-testnet` flavor defaults its asset map
   (`ASSET_MAP_URL`) to `/registry/index.minimal.json`.
@@ -323,7 +323,7 @@ verification. They are seeded from `seed/legacy-assets.json` on first run
 (`legacy: true`) so their labels resolve, alongside the BONDX OpenAMP demo asset
 (which does earn verification the normal way). SBTC is pegged bitcoin: 1:1
 BTC held in the
-[sbtc-bridge](https://github.com/GracedEternalKingCabbageMan/sbtc-bridge)
+[sbtc-bridge](https://github.com/ConcatenaLabs/sbtc-bridge)
 reserve, an ordinary unprivileged reissuable asset, not Elements' consensus
 peg; native Bitcoin remains a distinct asset in every wallet. Seeding never
 overwrites an existing entry's contract and still enforces ticker uniqueness.
@@ -353,7 +353,7 @@ Requirements: Node.js (no npm install needed; the server uses only Node
 built-ins).
 
 ```
-git clone https://github.com/GracedEternalKingCabbageMan/sequentia-registry.git
+git clone https://github.com/ConcatenaLabs/sequentia-registry.git
 cd sequentia-registry
 node server.js
 ```

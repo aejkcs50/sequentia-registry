@@ -8,7 +8,7 @@ The whole service is one file, `server.js`, on raw `http.createServer` with **ze
 dependencies** — Node built-ins only. There is no `package.json`.
 
 Node and consensus conventions live in the
-[`Sequentia`](https://github.com/GracedEternalKingCabbageMan/Sequentia) repo.
+[`Sequentia`](https://github.com/ConcatenaLabs/Sequentia) repo.
 
 ## Run
 
