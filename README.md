@@ -31,9 +31,9 @@ node server.js
 Umbrella protocol documentation:
 [`Sequentia/doc/sequentia/`](https://github.com/ConcatenaLabs/Sequentia/tree/master/doc/sequentia).
 
-## Status and live instance
+## Live instance
 
-A public instance serves the current testnet at:
+A public instance serves the public testnet at:
 
 ```
 https://sequentiatestnet.com/registry/
@@ -50,11 +50,11 @@ curl -s https://sequentiatestnet.com/registry/health
 curl -s https://sequentiatestnet.com/registry/index.minimal.json
 ```
 
-The service is functional today: the full verification pipeline (on-chain
-contract binding, asset-id re-derivation, domain proof, ticker uniqueness) is
-implemented and enforced for new registrations. Current limitation: the node
-fetches the index over plain HTTP with no signature, so labels are advisory to
-consumers (see "Trust model" below).
+The full verification pipeline -- on-chain contract binding, asset-id
+re-derivation, domain proof, ticker uniqueness -- is enforced for every new
+registration. It stops at the consumer's door: the node fetches the index over
+plain HTTP with no signature, so labels are advisory rather than a guarantee
+(see "Trust model" below).
 
 ## Trust model
 
@@ -316,8 +316,8 @@ the signature (the key as 64-hex or WIF; on a shared machine pass it via
 
 ## Seeded testnet assets
 
-The current public testnet (re-genesis 2026-07-05) demo assets, the Sequence
-token (tSEQ), USDX, EURX, GOLD, SILVR, OILX, and SBTC, were issued with
+The public testnet's demo assets -- the Sequence token (tSEQ), USDX, EURX,
+GOLD, SILVR, OILX and SBTC -- were issued with
 `contract_hash = 0`, so they can **never** pass cryptographic chain+domain
 verification. They are seeded from `seed/legacy-assets.json` on first run
 (`legacy: true`) so their labels resolve, alongside the BONDX OpenAMP demo asset
@@ -343,7 +343,7 @@ asset can never be silently overridden.
 must be earned through `POST /` (on-chain contract match + `.well-known` domain
 proof); an operator override is a deliberate trust shortcut appropriate only when
 the operator issued the demo assets themselves and no real contract exists to
-verify against. The seven testnet demo assets above use it because they predate
+verify against. The testnet demo assets above use it because they predate
 the contract scheme; every asset issued with a real `contract_hash` should verify
 cryptographically instead.
 
